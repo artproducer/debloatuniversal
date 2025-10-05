@@ -317,6 +317,15 @@ function getRootLabel() {
     return 'ROOT';
 }
 
+function log(message, type = 'info', details = null) {
+    const logsContainer = document.getElementById('logsContainer');
+
+    if (!logsContainer) {
+        const method = type === 'error' ? 'error' : 'log';
+        console[method](`[${type}] ${message}`, details ?? '');
+        return;
+    }
+
     const icons = {
         info: '🔷',
         success: '✅',
