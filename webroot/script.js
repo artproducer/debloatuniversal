@@ -19,7 +19,9 @@ const CONFIG = {
         '/data/adb/modules/debloat_universal/common/list.sh'
     ],
     LIST_SH_FALLBACKS: [
+        './list.sh',
         '../list.sh',
+        './common/list.sh',
         '../common/list.sh'
     ],
     POST_FS_DATA_PATH: '/data/adb/modules/debloat_universal/common/post-fs-data.sh'
@@ -829,6 +831,18 @@ async function loadRecommendedList() {
         });
     }
 
+    if (typeof STATE.execFn === 'function') {
+        (CONFIG.LIST_SH_PATHS || []).forEach(path => {
+            loaders.push({
+                label: `shell:${path}`,
+                load: async () => {
+                    const command = `[ -f "${shEscape(path)}" ] && cat "${shEscape(path)}" || true`;
+                    return executeCommand(command, { silent: true });
+                }
+            });
+        });
+    }
+
     if (typeof fetch === 'function') {
         (CONFIG.LIST_SH_FALLBACKS || []).forEach(path => {
             loaders.push({
@@ -885,12 +899,38 @@ function markRecommendations(apps) {
 async function findApkPaths(basePath, options = {}) {
     const maxDepth = options.maxDepth ?? 2;
     const pattern = options.pattern ?? '*.apk';
-    const command = `find "${shEscape(basePath)}" -maxdepth ${maxDepth} -type f -name "${pattern}" 2>/dev/null`;
-    const output = await executeCommand(command, { silent: true });
-    if (!output) {
-        return [];
+    const escapedBase = shEscape(basePath);
+    const escapedPattern = shEscape(pattern);
+    const candidates = new Set();
+
+    const commands = [
+        `find "${escapedBase}" -maxdepth ${maxDepth} -type f -iname "${escapedPattern}" 2>/dev/null || true`,
+        `(command -v toybox >/dev/null 2>&1 && toybox find "${escapedBase}" -maxdepth ${maxDepth} -type f -iname "${escapedPattern}" 2>/dev/null) || true`,
+        `(command -v busybox >/dev/null 2>&1 && busybox find "${escapedBase}" -maxdepth ${maxDepth} -type f -iname "${escapedPattern}" 2>/dev/null) || true`,
+        `find "${escapedBase}" -type f -iname "${escapedPattern}" 2>/dev/null || true`,
+        `(command -v toybox >/dev/null 2>&1 && toybox find "${escapedBase}" -type f -iname "${escapedPattern}" 2>/dev/null) || true`,
+        `(command -v busybox >/dev/null 2>&1 && busybox find "${escapedBase}" -type f -iname "${escapedPattern}" 2>/dev/null) || true`
+    ];
+
+    for (const command of commands) {
+        let output;
+        try {
+            output = await executeCommand(command, { silent: true });
+        } catch {
+            continue;
+        }
+
+        if (!output) {
+            continue;
+        }
+
+        output.split(/\r?\n/)
+            .map(line => line.trim())
+            .filter(line => line && /\.apk$/i.test(line))
+            .forEach(line => candidates.add(line));
     }
-    return output.split('\n').map(line => line.trim()).filter(Boolean);
+
+    return Array.from(candidates);
 }
 
 async function collectSystemApps() {
@@ -905,13 +945,19 @@ async function collectSystemApps() {
                 continue;
             }
 
+            const uniqueTargets = new Set();
+
             apkPaths.forEach(apkPath => {
                 const record = buildAppRecord(apkPath, 'system');
                 if (!records.has(record.removeTarget)) {
                     records.set(record.removeTarget, record);
                 }
+                uniqueTargets.add(record.removeTarget);
             });
-            log('📦 APK detectados', 'info', `${apkPaths.length} elementos en ${basePath}`);
+            const uniqueLabel = uniqueTargets.size !== apkPaths.length
+                ? ` (${uniqueTargets.size} carpetas únicas)`
+                : '';
+            log('📦 APK detectados', 'info', `${apkPaths.length} archivos en ${basePath}${uniqueLabel}`);
         } catch (error) {
             log('⚠️ No se pudo leer la ruta', 'warning', `${basePath}\n${error.message}`);
         }
@@ -931,13 +977,19 @@ async function collectUserApps() {
                 continue;
             }
 
+            const uniqueTargets = new Set();
+
             apkPaths.forEach(apkPath => {
                 const record = buildAppRecord(apkPath, 'user');
                 if (!records.has(record.removeTarget)) {
                     records.set(record.removeTarget, record);
                 }
+                uniqueTargets.add(record.removeTarget);
             });
-            log('📱 APK detectados en usuario', 'info', `${apkPaths.length} elementos en ${basePath}`);
+            const uniqueLabel = uniqueTargets.size !== apkPaths.length
+                ? ` (${uniqueTargets.size} carpetas únicas)`
+                : '';
+            log('📱 APK detectados en usuario', 'info', `${apkPaths.length} archivos en ${basePath}${uniqueLabel}`);
         } catch (error) {
             log('⚠️ No se pudo leer la ruta de usuario', 'warning', `${basePath}\n${error.message}`);
         }
