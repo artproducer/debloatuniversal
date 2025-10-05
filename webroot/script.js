@@ -22,7 +22,7 @@ const CONFIG = {
         '../list.sh',
         '../common/list.sh'
     ],
-    POST_FS_DATA_PATH: '/data/adb/modules/debloat_universal/post-fs-data.sh'
+    POST_FS_DATA_PATH: '/data/adb/modules/debloat_universal/common/post-fs-data.sh'
 };
 
 const STATE = {
@@ -360,6 +360,72 @@ function log(message, type = 'info', details = null) {
 
     while (logsContainer.children.length > 200) {
         logsContainer.removeChild(logsContainer.lastChild);
+    }
+}
+
+function buildLogText(entry) {
+    if (!entry) {
+        return '';
+    }
+
+    const time = entry.querySelector('.log-time')?.textContent?.trim() ?? '';
+    const icon = entry.querySelector('.log-icon')?.textContent?.trim() ?? '';
+    const message = entry.querySelector('.log-message')?.textContent?.trim() ?? '';
+    const details = entry.querySelector('.log-details')?.textContent ?? '';
+
+    const base = [time, icon, message].filter(Boolean).join(' ').trim();
+
+    if (!details) {
+        return base;
+    }
+
+    const indentedDetails = details
+        .replace(/\r/g, '')
+        .split('\n')
+        .map(line => line.trimEnd())
+        .map(line => `  ${line}`)
+        .join('\n');
+
+    return `${base}\n${indentedDetails}`.trim();
+}
+
+async function copyLogsToClipboard() {
+    const logsContainer = document.getElementById('logsContainer');
+    if (!logsContainer || logsContainer.children.length === 0) {
+        log('ℹ️ No hay registros para copiar', 'info');
+        return;
+    }
+
+    const lines = Array.from(logsContainer.children)
+        .reverse()
+        .map(buildLogText)
+        .filter(Boolean);
+
+    if (lines.length === 0) {
+        log('ℹ️ No hay registros para copiar', 'info');
+        return;
+    }
+
+    const payload = lines.join('\n');
+
+    try {
+        if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+            await navigator.clipboard.writeText(payload);
+        } else {
+            const textarea = document.createElement('textarea');
+            textarea.value = payload;
+            textarea.setAttribute('readonly', 'true');
+            textarea.style.position = 'absolute';
+            textarea.style.left = '-9999px';
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+        }
+
+        log('📋 Logs copiados al portapapeles', 'success');
+    } catch (error) {
+        log('❌ No se pudieron copiar los logs', 'error', error.message);
     }
 }
 
@@ -967,32 +1033,26 @@ async function removeArtifactsWithExtension(moduleRoot, extension, keepSet) {
 async function ensureModuleArtifacts(targetDirs) {
     const moduleRoot = CONFIG.MODULE_PATH.replace(/\/+$/, '');
     const keepSet = new Set(targetDirs);
-    const activeExtension = STATE.rootType === 'ksu' ? '.remove' : '.replace';
-    const inactiveExtension = STATE.rootType === 'ksu' ? '.replace' : '.remove';
+    const activeExtension = '.replace';
+    const inactiveExtension = '.remove';
 
     await removeArtifactsWithExtension(moduleRoot, inactiveExtension, new Set());
     await removeArtifactsWithExtension(moduleRoot, activeExtension, keepSet);
 
     for (const dir of targetDirs) {
         const moduleTarget = `${moduleRoot}${dir}${activeExtension}`;
-        const parent = getDirname(moduleTarget);
-        if (STATE.rootType === 'ksu') {
-            await executeCommand(`mkdir -p "${shEscape(parent)}" && touch "${shEscape(moduleTarget)}"`);
-        } else {
-            await executeCommand(`mkdir -p "${shEscape(moduleTarget)}"`);
-        }
+        await executeCommand(`mkdir -p "${shEscape(moduleTarget)}"`);
     }
 }
 
 async function writePostFsDataScript(targetDirs) {
     const listString = targetDirs.join(' ');
-    const removeLine = STATE.rootType === 'ksu' ? `remove="${listString}"` : 'remove=""';
-    const replaceLine = STATE.rootType === 'magisk' ? `replace="${listString}"` : 'replace=""';
+    const replaceLine = targetDirs.length > 0 ? `REPLACE="${listString}"` : 'REPLACE=""';
+    const postFsDir = getDirname(CONFIG.POST_FS_DATA_PATH);
 
     const script = `#!/system/bin/sh
 # Autogenerado por Debloat Universal WebUI
 MODDIR=\${0%/*}
-${removeLine}
 ${replaceLine}
 
 cleanup_artifacts() {
@@ -1015,22 +1075,14 @@ apply_list() {
     local dest="$MODDIR\${target}\${suffix}"
     local parent="$(dirname "$dest")"
     mkdir -p "$parent"
-    if [ "$suffix" = ".remove" ]; then
-      touch "$dest"
-    else
-      mkdir -p "$dest"
-    fi
+    mkdir -p "$dest"
   done
 }
 
-if [ -n "$remove" ]; then
-  cleanup_artifacts ".replace" "-type d"
-  cleanup_artifacts ".remove" "-type f"
-  apply_list "$remove" ".remove"
-elif [ -n "$replace" ]; then
+if [ -n "$REPLACE" ]; then
   cleanup_artifacts ".remove" "-type f"
   cleanup_artifacts ".replace" "-type d"
-  apply_list "$replace" ".replace"
+  apply_list "$REPLACE" ".replace"
 else
   cleanup_artifacts ".remove" "-type f"
   cleanup_artifacts ".replace" "-type d"
@@ -1039,6 +1091,7 @@ fi
 exit 0
 `;
 
+    await executeCommand(`mkdir -p "${shEscape(postFsDir)}"`, { silent: true });
     await executeCommand(`cat <<'EOF' > "${shEscape(CONFIG.POST_FS_DATA_PATH)}"
 ${script}
 EOF`);
@@ -1210,6 +1263,11 @@ function initEventListeners() {
             }
             log('🧹 Logs limpiados', 'info');
         });
+    }
+
+    const copyLogsBtn = document.getElementById('copyLogsBtn');
+    if (copyLogsBtn) {
+        copyLogsBtn.addEventListener('click', copyLogsToClipboard);
     }
 }
 
