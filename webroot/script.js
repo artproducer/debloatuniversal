@@ -58,7 +58,7 @@ function escapeHTML(value) {
 function jsStringEscape(value) {
     return String(value)
         .replace(/\\/g, '\\\\')
-        .replace(/'/g, '\\'')
+        .replace(/'/g, "\\'")
         .replace(/\n/g, '\\n')
         .replace(/\r/g, '\\r');
 }
@@ -525,8 +525,8 @@ function renderApps() {
         const appName = escapeHTML(app.name);
         const safeDir = escapeHTML(app.removeTarget);
         const systemInfoMessage = STATE.rootType
-            ? Se aplicará <strong></strong> sobre 
-            : Pendiente de root • ;
+            ? `Se aplicará <code>${escapeHTML(methodLabel)}</code> sobre <code>${safeDir || safePath}</code>`
+            : 'Pendiente de root • Ejecuta manualmente el script desde la pestaña Acciones';
         const pathForJS = jsStringEscape(app.path);
         const nameForJS = jsStringEscape(app.name);
         const appType = app.type === 'system' ? '🔧 Sistema' : '👤 Usuario';
@@ -569,7 +569,7 @@ function renderApps() {
                 ${app.action === 'remove' ? `
                 <div style="margin-top: 0.75rem; padding: 0.5rem; background: var(--bg-secondary); border-radius: var(--radius-sm); text-align: center;">
                     <small style="color: var(--text-secondary);">
-                        \
+                        ${systemInfoMessage}
                     </small>
                 </div>` : ''}
             `;
