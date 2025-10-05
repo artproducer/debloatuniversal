@@ -98,12 +98,21 @@
                         <div class="section-heading">
                             <h2>Registro de Eventos</h2>
                         </div>
-                        <button class="btn btn-secondary" id="clearLogsBtn">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                                <path d="M6 18L18 6M6 6L18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                            </svg>
-                            Limpiar
-                        </button>
+                        <div class="log-actions">
+                            <button class="btn btn-secondary" id="copyLogsBtn">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                                    <rect x="9" y="7" width="11" height="13" rx="1.5" stroke="currentColor" stroke-width="2"/>
+                                    <path d="M5 16V5.5C5 4.67157 5.67157 4 6.5 4H15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                </svg>
+                                Copiar
+                            </button>
+                            <button class="btn btn-secondary" id="clearLogsBtn">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                                    <path d="M6 18L18 6M6 6L18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                </svg>
+                                Limpiar
+                            </button>
+                        </div>
                     </div>
                     <div class="logs-container" id="logsContainer"></div>
                 </div>

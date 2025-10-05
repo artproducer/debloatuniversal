@@ -515,6 +515,16 @@ body {
     font-size: 0.875rem;
 }
 
+.log-actions {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.log-actions .btn {
+    flex: 1 0 auto;
+}
+
 .log-entry {
     padding: 0.5rem;
     border-radius: var(--radius-sm);

@@ -19,10 +19,12 @@ const CONFIG = {
         '/data/adb/modules/debloat_universal/common/list.sh'
     ],
     LIST_SH_FALLBACKS: [
+        './list.sh',
         '../list.sh',
+        './common/list.sh',
         '../common/list.sh'
     ],
-    POST_FS_DATA_PATH: '/data/adb/modules/debloat_universal/post-fs-data.sh'
+    POST_FS_DATA_PATH: '/data/adb/modules/debloat_universal/common/post-fs-data.sh'
 };
 
 const STATE = {
@@ -58,7 +60,7 @@ function escapeHTML(value) {
 function jsStringEscape(value) {
     return String(value)
         .replace(/\\/g, '\\\\')
-        .replace(/'/g, '\\'')
+        .replace(/'/g, "\\'")
         .replace(/\n/g, '\\n')
         .replace(/\r/g, '\\r');
 }
@@ -317,6 +319,15 @@ function getRootLabel() {
     return 'ROOT';
 }
 
+function log(message, type = 'info', details = null) {
+    const logsContainer = document.getElementById('logsContainer');
+
+    if (!logsContainer) {
+        const method = type === 'error' ? 'error' : 'log';
+        console[method](`[${type}] ${message}`, details ?? '');
+        return;
+    }
+
     const icons = {
         info: '🔷',
         success: '✅',
@@ -351,6 +362,72 @@ function getRootLabel() {
 
     while (logsContainer.children.length > 200) {
         logsContainer.removeChild(logsContainer.lastChild);
+    }
+}
+
+function buildLogText(entry) {
+    if (!entry) {
+        return '';
+    }
+
+    const time = entry.querySelector('.log-time')?.textContent?.trim() ?? '';
+    const icon = entry.querySelector('.log-icon')?.textContent?.trim() ?? '';
+    const message = entry.querySelector('.log-message')?.textContent?.trim() ?? '';
+    const details = entry.querySelector('.log-details')?.textContent ?? '';
+
+    const base = [time, icon, message].filter(Boolean).join(' ').trim();
+
+    if (!details) {
+        return base;
+    }
+
+    const indentedDetails = details
+        .replace(/\r/g, '')
+        .split('\n')
+        .map(line => line.trimEnd())
+        .map(line => `  ${line}`)
+        .join('\n');
+
+    return `${base}\n${indentedDetails}`.trim();
+}
+
+async function copyLogsToClipboard() {
+    const logsContainer = document.getElementById('logsContainer');
+    if (!logsContainer || logsContainer.children.length === 0) {
+        log('ℹ️ No hay registros para copiar', 'info');
+        return;
+    }
+
+    const lines = Array.from(logsContainer.children)
+        .reverse()
+        .map(buildLogText)
+        .filter(Boolean);
+
+    if (lines.length === 0) {
+        log('ℹ️ No hay registros para copiar', 'info');
+        return;
+    }
+
+    const payload = lines.join('\n');
+
+    try {
+        if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+            await navigator.clipboard.writeText(payload);
+        } else {
+            const textarea = document.createElement('textarea');
+            textarea.value = payload;
+            textarea.setAttribute('readonly', 'true');
+            textarea.style.position = 'absolute';
+            textarea.style.left = '-9999px';
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+        }
+
+        log('📋 Logs copiados al portapapeles', 'success');
+    } catch (error) {
+        log('❌ No se pudieron copiar los logs', 'error', error.message);
     }
 }
 
@@ -516,8 +593,8 @@ function renderApps() {
         const appName = escapeHTML(app.name);
         const safeDir = escapeHTML(app.removeTarget);
         const systemInfoMessage = STATE.rootType
-            ? Se aplicará <strong></strong> sobre 
-            : Pendiente de root • ;
+            ? `Se aplicará <code>${escapeHTML(methodLabel)}</code> sobre <code>${safeDir || safePath}</code>`
+            : 'Pendiente de root • Ejecuta manualmente el script desde la pestaña Acciones';
         const pathForJS = jsStringEscape(app.path);
         const nameForJS = jsStringEscape(app.name);
         const appType = app.type === 'system' ? '🔧 Sistema' : '👤 Usuario';
@@ -560,7 +637,7 @@ function renderApps() {
                 ${app.action === 'remove' ? `
                 <div style="margin-top: 0.75rem; padding: 0.5rem; background: var(--bg-secondary); border-radius: var(--radius-sm); text-align: center;">
                     <small style="color: var(--text-secondary);">
-                        \
+                        ${systemInfoMessage}
                     </small>
                 </div>` : ''}
             `;
@@ -754,6 +831,18 @@ async function loadRecommendedList() {
         });
     }
 
+    if (typeof STATE.execFn === 'function') {
+        (CONFIG.LIST_SH_PATHS || []).forEach(path => {
+            loaders.push({
+                label: `shell:${path}`,
+                load: async () => {
+                    const command = `[ -f "${shEscape(path)}" ] && cat "${shEscape(path)}" || true`;
+                    return executeCommand(command, { silent: true });
+                }
+            });
+        });
+    }
+
     if (typeof fetch === 'function') {
         (CONFIG.LIST_SH_FALLBACKS || []).forEach(path => {
             loaders.push({
@@ -810,12 +899,38 @@ function markRecommendations(apps) {
 async function findApkPaths(basePath, options = {}) {
     const maxDepth = options.maxDepth ?? 2;
     const pattern = options.pattern ?? '*.apk';
-    const command = `find "${shEscape(basePath)}" -maxdepth ${maxDepth} -type f -name "${pattern}" 2>/dev/null`;
-    const output = await executeCommand(command, { silent: true });
-    if (!output) {
-        return [];
+    const escapedBase = shEscape(basePath);
+    const escapedPattern = shEscape(pattern);
+    const candidates = new Set();
+
+    const commands = [
+        `find "${escapedBase}" -maxdepth ${maxDepth} -type f -iname "${escapedPattern}" 2>/dev/null || true`,
+        `(command -v toybox >/dev/null 2>&1 && toybox find "${escapedBase}" -maxdepth ${maxDepth} -type f -iname "${escapedPattern}" 2>/dev/null) || true`,
+        `(command -v busybox >/dev/null 2>&1 && busybox find "${escapedBase}" -maxdepth ${maxDepth} -type f -iname "${escapedPattern}" 2>/dev/null) || true`,
+        `find "${escapedBase}" -type f -iname "${escapedPattern}" 2>/dev/null || true`,
+        `(command -v toybox >/dev/null 2>&1 && toybox find "${escapedBase}" -type f -iname "${escapedPattern}" 2>/dev/null) || true`,
+        `(command -v busybox >/dev/null 2>&1 && busybox find "${escapedBase}" -type f -iname "${escapedPattern}" 2>/dev/null) || true`
+    ];
+
+    for (const command of commands) {
+        let output;
+        try {
+            output = await executeCommand(command, { silent: true });
+        } catch {
+            continue;
+        }
+
+        if (!output) {
+            continue;
+        }
+
+        output.split(/\r?\n/)
+            .map(line => line.trim())
+            .filter(line => line && /\.apk$/i.test(line))
+            .forEach(line => candidates.add(line));
     }
-    return output.split('\n').map(line => line.trim()).filter(Boolean);
+
+    return Array.from(candidates);
 }
 
 async function collectSystemApps() {
@@ -830,13 +945,19 @@ async function collectSystemApps() {
                 continue;
             }
 
+            const uniqueTargets = new Set();
+
             apkPaths.forEach(apkPath => {
                 const record = buildAppRecord(apkPath, 'system');
                 if (!records.has(record.removeTarget)) {
                     records.set(record.removeTarget, record);
                 }
+                uniqueTargets.add(record.removeTarget);
             });
-            log('📦 APK detectados', 'info', `${apkPaths.length} elementos en ${basePath}`);
+            const uniqueLabel = uniqueTargets.size !== apkPaths.length
+                ? ` (${uniqueTargets.size} carpetas únicas)`
+                : '';
+            log('📦 APK detectados', 'info', `${apkPaths.length} archivos en ${basePath}${uniqueLabel}`);
         } catch (error) {
             log('⚠️ No se pudo leer la ruta', 'warning', `${basePath}\n${error.message}`);
         }
@@ -856,13 +977,19 @@ async function collectUserApps() {
                 continue;
             }
 
+            const uniqueTargets = new Set();
+
             apkPaths.forEach(apkPath => {
                 const record = buildAppRecord(apkPath, 'user');
                 if (!records.has(record.removeTarget)) {
                     records.set(record.removeTarget, record);
                 }
+                uniqueTargets.add(record.removeTarget);
             });
-            log('📱 APK detectados en usuario', 'info', `${apkPaths.length} elementos en ${basePath}`);
+            const uniqueLabel = uniqueTargets.size !== apkPaths.length
+                ? ` (${uniqueTargets.size} carpetas únicas)`
+                : '';
+            log('📱 APK detectados en usuario', 'info', `${apkPaths.length} archivos en ${basePath}${uniqueLabel}`);
         } catch (error) {
             log('⚠️ No se pudo leer la ruta de usuario', 'warning', `${basePath}\n${error.message}`);
         }
@@ -958,32 +1085,26 @@ async function removeArtifactsWithExtension(moduleRoot, extension, keepSet) {
 async function ensureModuleArtifacts(targetDirs) {
     const moduleRoot = CONFIG.MODULE_PATH.replace(/\/+$/, '');
     const keepSet = new Set(targetDirs);
-    const activeExtension = STATE.rootType === 'ksu' ? '.remove' : '.replace';
-    const inactiveExtension = STATE.rootType === 'ksu' ? '.replace' : '.remove';
+    const activeExtension = '.replace';
+    const inactiveExtension = '.remove';
 
     await removeArtifactsWithExtension(moduleRoot, inactiveExtension, new Set());
     await removeArtifactsWithExtension(moduleRoot, activeExtension, keepSet);
 
     for (const dir of targetDirs) {
         const moduleTarget = `${moduleRoot}${dir}${activeExtension}`;
-        const parent = getDirname(moduleTarget);
-        if (STATE.rootType === 'ksu') {
-            await executeCommand(`mkdir -p "${shEscape(parent)}" && touch "${shEscape(moduleTarget)}"`);
-        } else {
-            await executeCommand(`mkdir -p "${shEscape(moduleTarget)}"`);
-        }
+        await executeCommand(`mkdir -p "${shEscape(moduleTarget)}"`);
     }
 }
 
 async function writePostFsDataScript(targetDirs) {
     const listString = targetDirs.join(' ');
-    const removeLine = STATE.rootType === 'ksu' ? `remove="${listString}"` : 'remove=""';
-    const replaceLine = STATE.rootType === 'magisk' ? `replace="${listString}"` : 'replace=""';
+    const replaceLine = targetDirs.length > 0 ? `REPLACE="${listString}"` : 'REPLACE=""';
+    const postFsDir = getDirname(CONFIG.POST_FS_DATA_PATH);
 
     const script = `#!/system/bin/sh
 # Autogenerado por Debloat Universal WebUI
 MODDIR=\${0%/*}
-${removeLine}
 ${replaceLine}
 
 cleanup_artifacts() {
@@ -1003,25 +1124,17 @@ apply_list() {
   local suffix="$2"
   [ -n "$list" ] || return 0
   for target in $list; do
-    local dest="$MODDIR${target}${suffix}"
+    local dest="$MODDIR\${target}\${suffix}"
     local parent="$(dirname "$dest")"
     mkdir -p "$parent"
-    if [ "$suffix" = ".remove" ]; then
-      touch "$dest"
-    else
-      mkdir -p "$dest"
-    fi
+    mkdir -p "$dest"
   done
 }
 
-if [ -n "$remove" ]; then
-  cleanup_artifacts ".replace" "-type d"
-  cleanup_artifacts ".remove" "-type f"
-  apply_list "$remove" ".remove"
-elif [ -n "$replace" ]; then
+if [ -n "$REPLACE" ]; then
   cleanup_artifacts ".remove" "-type f"
   cleanup_artifacts ".replace" "-type d"
-  apply_list "$replace" ".replace"
+  apply_list "$REPLACE" ".replace"
 else
   cleanup_artifacts ".remove" "-type f"
   cleanup_artifacts ".replace" "-type d"
@@ -1030,6 +1143,7 @@ fi
 exit 0
 `;
 
+    await executeCommand(`mkdir -p "${shEscape(postFsDir)}"`, { silent: true });
     await executeCommand(`cat <<'EOF' > "${shEscape(CONFIG.POST_FS_DATA_PATH)}"
 ${script}
 EOF`);
@@ -1201,6 +1315,11 @@ function initEventListeners() {
             }
             log('🧹 Logs limpiados', 'info');
         });
+    }
+
+    const copyLogsBtn = document.getElementById('copyLogsBtn');
+    if (copyLogsBtn) {
+        copyLogsBtn.addEventListener('click', copyLogsToClipboard);
     }
 }
 
