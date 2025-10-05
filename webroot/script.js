@@ -1012,7 +1012,7 @@ apply_list() {
   local suffix="$2"
   [ -n "$list" ] || return 0
   for target in $list; do
-    local dest="$MODDIR${target}${suffix}"
+    local dest="$MODDIR\${target}\${suffix}"
     local parent="$(dirname "$dest")"
     mkdir -p "$parent"
     if [ "$suffix" = ".remove" ]; then
