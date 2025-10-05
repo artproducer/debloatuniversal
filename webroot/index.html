@@ -1,0 +1,139 @@
+﻿<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debloat Universal - KSU/Magisk</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <div class="logo">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
+                        <path d="M19 7L12 3L5 7M19 7L12 11M19 7V17L12 21M12 11L5 7M12 11V21M5 7V17L12 21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    <h1>Debloat Universal</h1>
+                </div>
+                <div class="status-badge" id="statusBadge">
+                    <span class="status-dot"></span>
+                    <span class="status-text">Detectando...</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Tab Navigation -->
+            <nav class="tabs">
+                <button class="tab-btn active" data-tab="apps">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                        <rect x="3" y="3" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/>
+                        <rect x="14" y="3" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/>
+                        <rect x="3" y="14" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/>
+                        <rect x="14" y="14" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/>
+                    </svg>
+                    Aplicaciones
+                </button>
+                <button class="tab-btn" data-tab="logs">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                        <path d="M9 12H15M9 16H15M17 21H7C5.89543 21 5 20.1046 5 19V5C5 3.89543 5.89543 3 7 3H12.5858C12.851 3 13.1054 3.10536 13.2929 3.29289L18.7071 8.70711C18.8946 8.89464 19 9.149 19 9.41421V19C19 20.1046 18.1046 21 17 21Z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                    Logs
+                </button>
+            </nav>
+
+            <!-- Tab Content -->
+            <div class="tab-content">
+                <!-- Apps Tab -->
+                <div class="tab-pane active" data-tab="apps" id="appsTab">
+                    <div class="section-header">
+                        <div class="section-heading">
+                            <h2>Aplicaciones detectadas</h2>
+                            <p class="section-subtitle">
+                                <span id="statsSystem">0 apps de sistema</span>
+                                <span class="separator">•</span>
+                                <span id="statsUser">0 apps de usuario</span>
+                                <span class="separator">•</span>
+                                <span id="statsFiltered">0 coincidencias</span>
+                            </p>
+                        </div>
+                        <button class="btn btn-primary" id="scanBtn">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                                <path d="M21 21L15 15M17 10C17 13.866 13.866 17 10 17C6.13401 17 3 13.866 3 10C3 6.13401 6.13401 3 10 3C13.866 3 17 6.13401 17 10Z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            </svg>
+                            Escanear Apps
+                        </button>
+                    </div>
+
+                    <div class="search-box">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                            <path d="M21 21L15 15M17 10C17 13.866 13.866 17 10 17C6.13401 17 3 13.866 3 10C3 6.13401 6.13401 3 10 3C13.866 3 17 6.13401 17 10Z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                        <input type="text" id="searchInput" placeholder="Buscar aplicaciones...">
+                    </div>
+
+                    <div class="filter-chips">
+                        <button class="chip active" data-filter="all">Todas</button>
+                        <button class="chip" data-filter="marked">Marcadas</button>
+                        <button class="chip" data-filter="recommended">Recomendadas</button>
+                        <button class="chip" data-filter="keep">Conservar</button>
+                    </div>
+
+                    <div id="appsContainer" class="apps-grid">
+                        <div class="empty-state">
+                            <svg width="64" height="64" viewBox="0 0 24 24" fill="none">
+                                <path d="M12 3V7M12 7L9 4M12 7L15 4M5 13L7 11M7 11L4 9M7 11L4 13M19 13L17 11M17 11L20 9M17 11L20 13M12 17V21M12 21L9 18M12 21L15 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            </svg>
+                            <p>Presiona "Escanear Apps" para detectar aplicaciones</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Logs Tab -->
+                <div class="tab-pane" data-tab="logs" id="logsTab">
+                    <div class="section-header">
+                        <div class="section-heading">
+                            <h2>Registro de Eventos</h2>
+                        </div>
+                        <button class="btn btn-secondary" id="clearLogsBtn">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                                <path d="M6 18L18 6M6 6L18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            </svg>
+                            Limpiar
+                        </button>
+                    </div>
+                    <div class="logs-container" id="logsContainer"></div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Footer Actions -->
+        <footer class="footer">
+            <div class="footer-stats">
+                <div class="stat">
+                    <span class="stat-label">Total para eliminar:</span>
+                    <span class="stat-value" id="removeCount">0</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Apps de sistema:</span>
+                    <span class="stat-value" id="replaceCount">0</span>
+                </div>
+            </div>
+            <button class="btn btn-success btn-large" id="applyBtn" disabled>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                    <path d="M5 13L9 17L19 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <span class="button-text">
+                    <span>Aplicar Cambios y Reiniciar</span>
+                    <small id="applyInfo">Sin cambios</small>
+                </span>
+            </button>
+        </footer>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
